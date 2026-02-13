@@ -445,20 +445,21 @@ export default function AvondaleFarmPlanner() {
   const [atTasks, setAtTasks] = useState([]);
   const [atMethods, setAtMethods] = useState([]);
   const [atAreas, setAtAreas] = useState([]);
-  const [atToken, setAtToken] = useState("patUuQy8MfVOozGRe.59276185b53c5d0d191809b719b546db0032e455a25d5b58e2a88ddd8a034310");
+  const [atPlots, setAtPlots] = useState([]);
+  const AT_TOKEN = "patUuQy8MfVOozGRe.59276185b53c5d0d191809b719b546db0032e455a25d5b58e2a88ddd8a034310";
   const [atLoading, setAtLoading] = useState(false);
   const [atError, setAtError] = useState(null);
 
-  const fetchAirtable = useCallback(async (token) => {
-    if (!token) return;
+  const fetchAirtable = useCallback(async () => {
     setAtLoading(true); setAtError(null);
-    const headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
+    const headers = { Authorization: `Bearer ${AT_TOKEN}`, "Content-Type": "application/json" };
     const base = "appQbfU2XIx0UEYIh";
     try {
-      const fetchAll = async (tableId) => {
+      const fetchAll = async (tableId, viewName) => {
         let all = [], offset = null;
         do {
-          const url = `https://api.airtable.com/v0/${base}/${tableId}?pageSize=100${offset ? `&offset=${offset}` : ""}`;
+          let url = `https://api.airtable.com/v0/${base}/${tableId}?pageSize=100${offset ? `&offset=${offset}` : ""}`;
+          if (viewName) url += `&view=${encodeURIComponent(viewName)}`;
           const res = await fetch(url, { headers });
           if (!res.ok) throw new Error(`Airtable ${res.status}: ${res.statusText}`);
           const data = await res.json();
@@ -467,18 +468,44 @@ export default function AvondaleFarmPlanner() {
         } while (offset);
         return all;
       };
-      const [tasks, methods, areas] = await Promise.all([
-        fetchAll("tblwxecwIEV6Ehu6F"),
+      const [tasks, methods, areas, plots] = await Promise.all([
+        fetchAll("tblwxecwIEV6Ehu6F", "Avondale"),
         fetchAll("tblqZKea6J4Thvgtz"),
         fetchAll("tbl7ztPLlm7wevuh9"),
+        fetchAll("tblrpebzWu7z2uwaX"),
       ]);
-      setAtTasks(tasks); setAtMethods(methods); setAtAreas(areas);
-      try { window.localStorage?.setItem("at_token", token); } catch {}
+      setAtTasks(tasks); setAtMethods(methods); setAtAreas(areas); setAtPlots(plots);
     } catch (err) { setAtError(err.message); }
     setAtLoading(false);
   }, []);
 
-  useEffect(() => { if (atToken) fetchAirtable(atToken); }, [atToken, fetchAirtable]);
+  useEffect(() => { fetchAirtable(); }, [fetchAirtable]);
+
+  // ─── Resolve Airtable area name for a task via Plot → Area chain ───
+  const resolveTaskArea = useCallback((task) => {
+    // Try Area (Link) first
+    const areaLinks = task.fields["Area (Link)"];
+    if (Array.isArray(areaLinks) && areaLinks.length > 0) {
+      const a = atAreas.find(ar => ar.id === areaLinks[0]);
+      if (a) return a.fields.Name || a.id;
+    }
+    // Fall back: resolve via Plot(s) → Area
+    const plotLinks = task.fields["Plot(s)"];
+    if (Array.isArray(plotLinks) && plotLinks.length > 0) {
+      const p = atPlots.find(pl => pl.id === plotLinks[0]);
+      if (p) {
+        const plotArea = p.fields.Area;
+        if (Array.isArray(plotArea) && plotArea.length > 0) {
+          const a = atAreas.find(ar => ar.id === plotArea[0]);
+          if (a) return a.fields.Name || a.id;
+        }
+      }
+    }
+    // Fall back: Scope Line name prefix
+    const name = task.fields.Name || "";
+    if (name.includes("[")) return name.match(/\[([^\]]+)\]/)?.[1] || "General";
+    return "General";
+  }, [atAreas, atPlots]);
 
   const svgRef = useRef(null);
   const containerRef = useRef(null);
@@ -902,7 +929,6 @@ export default function AvondaleFarmPlanner() {
               { id: "areas", label: "Areas", icon: "📍", val: `${AREAS.length}`, color: C.accent },
               { id: "plots", label: "Plots", icon: "🌱", val: `${PLOTS.length}`, color: C.spring },
               { id: "plants", label: "Plants", icon: "🌿", val: `${PLANTS.length}`, color: C.summer },
-              { id: "tasks", label: "Tasks", icon: "✅", val: atTasks.length > 0 ? `${atTasks.length}` : "—", color: C.warn },
             ].map(tab => (
               <div key={tab.id} onClick={() => setBottomTab(tab.id)}
                 style={{
@@ -1032,7 +1058,7 @@ export default function AvondaleFarmPlanner() {
       {/* ─── Tab Content ─── */}
       <div style={{ marginTop: 16, padding: isMobile ? 10 : 16, background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 10, overflowX: isMobile ? "auto" : "visible" }}>
 
-        {/* TIMELINE TAB (default) */}
+        {/* TIMELINE TAB (default) — seasonal chart + task drawers */}
         {bottomTab === "timeline" && (
           <div>
             <div style={{ fontSize: 12, fontWeight: 700, color: C.accent, marginBottom: 10, letterSpacing: 0.5, textTransform: "uppercase" }}>2026 Seasonal Timeline</div>
@@ -1064,6 +1090,84 @@ export default function AvondaleFarmPlanner() {
                   ))}
                 </React.Fragment>
               ))}
+            </div>
+
+            {/* ─── Task Drawers (by Area → Method) ─── */}
+            <div style={{ marginTop: 16, borderTop: `1px solid ${C.border}`, paddingTop: 12 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: C.accent, letterSpacing: 0.5, textTransform: "uppercase" }}>Avondale Tasks ({atTasks.length})</div>
+                {atTasks.length > 0 && (
+                  <button onClick={fetchAirtable}
+                    style={{ padding: "3px 10px", borderRadius: 4, border: `1px solid ${C.border}`, background: "transparent", color: C.textMuted, fontSize: 10, cursor: "pointer" }}>↻ Refresh</button>
+                )}
+              </div>
+
+              {atLoading && <div style={{ padding: 12, textAlign: "center", color: C.textMuted, fontSize: 12 }}>Loading tasks...</div>}
+              {atError && <div style={{ padding: 8, color: C.danger, fontSize: 11 }}>{atError}</div>}
+
+              {atTasks.length > 0 && !atLoading && (() => {
+                const methodMap = {};
+                atMethods.forEach(m => { methodMap[m.id] = m.fields["Method Name"] || m.fields.Name || m.id; });
+
+                const statusColors = { Planned: C.warn, "In Progress": C.accent, Complete: C.spring, Recurring: C.water, "Seasonal Hold": C.textMuted, Blocked: C.danger, Backlog: C.textDim };
+                const statusOrder = ["In Progress", "Planned", "Recurring", "Blocked", "Seasonal Hold", "Complete", "Backlog"];
+
+                // Group tasks by resolved area
+                const byArea = {};
+                atTasks.forEach(t => {
+                  const areaName = resolveTaskArea(t);
+                  if (!byArea[areaName]) byArea[areaName] = [];
+                  byArea[areaName].push(t);
+                });
+
+                return Object.entries(byArea).sort(([a], [b]) => a.localeCompare(b)).map(([areaName, tasks]) => {
+                  const byMethod = {};
+                  tasks.forEach(t => {
+                    const ml = t.fields.Method || [];
+                    const mn = Array.isArray(ml) && ml.length > 0 ? (methodMap[ml[0]] || "General") : "General";
+                    if (!byMethod[mn]) byMethod[mn] = [];
+                    byMethod[mn].push(t);
+                  });
+
+                  const planned = tasks.filter(t => t.fields.Status === "Planned").length;
+                  const done = tasks.filter(t => t.fields.Status === "Complete").length;
+
+                  return (
+                    <details key={areaName} style={{ marginBottom: 6 }}>
+                      <summary style={{ cursor: "pointer", padding: "8px 12px", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 12, fontWeight: 600, color: C.text, listStyle: "none", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <span>📍 {areaName}</span>
+                        <div style={{ display: "flex", gap: 6, fontSize: 10 }}>
+                          <span style={{ color: C.warn }}>{planned} planned</span>
+                          <span style={{ color: C.spring }}>{done} done</span>
+                          <span style={{ color: C.textDim }}>{tasks.length} total</span>
+                        </div>
+                      </summary>
+                      <div style={{ paddingLeft: 12, marginTop: 4 }}>
+                        {Object.entries(byMethod).sort(([a], [b]) => a.localeCompare(b)).map(([methodName, mTasks]) => (
+                          <div key={methodName} style={{ marginBottom: 6 }}>
+                            <div style={{ fontSize: 10, fontWeight: 600, color: C.textMuted, padding: "4px 0", borderBottom: `1px solid ${C.border}22` }}>⚙ {methodName} ({mTasks.length})</div>
+                            {mTasks
+                              .sort((a, b) => statusOrder.indexOf(a.fields.Status || "") - statusOrder.indexOf(b.fields.Status || ""))
+                              .map(t => (
+                              <div key={t.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "4px 8px", borderBottom: `1px solid ${C.border}11`, fontSize: 11 }}>
+                                <span style={{ color: C.text, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.fields.Name || "Untitled"}</span>
+                                <div style={{ display: "flex", gap: 4, alignItems: "center", flexShrink: 0, marginLeft: 8 }}>
+                                  {t.fields["Task Type"] && <span style={{ fontSize: 9, color: C.textDim }}>{t.fields["Task Type"]}</span>}
+                                  <span style={{ padding: "1px 6px", borderRadius: 4, fontSize: 9, fontWeight: 600,
+                                    color: statusColors[t.fields.Status] || C.textMuted,
+                                    background: (statusColors[t.fields.Status] || C.textMuted) + "18" }}>
+                                    {t.fields.Status || "—"}
+                                  </span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        ))}
+                      </div>
+                    </details>
+                  );
+                });
+              })()}
             </div>
           </div>
         )}
@@ -1216,98 +1320,6 @@ export default function AvondaleFarmPlanner() {
           </div>
         )}
 
-        {/* TASKS TAB — Kanban by area, grouped by method (live from Airtable) */}
-        {bottomTab === "tasks" && (
-          <div>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: C.accent, letterSpacing: 0.5, textTransform: "uppercase" }}>Tasks</div>
-              {atTasks.length > 0 && (
-                <button onClick={() => fetchAirtable(atToken)}
-                  style={{ padding: "3px 10px", borderRadius: 4, border: `1px solid ${C.border}`, background: "transparent", color: C.textMuted, fontSize: 10, cursor: "pointer" }}>↻ Refresh</button>
-              )}
-            </div>
-
-            {/* Token prompt if no data */}
-            {atTasks.length === 0 && !atLoading && (
-              <div style={{ padding: 16, textAlign: "center" }}>
-                <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 8 }}>Paste your Airtable Personal Access Token to load live tasks</div>
-                <div style={{ display: "flex", gap: 6, justifyContent: "center" }}>
-                  <input type="password" placeholder="pat..."
-                    style={{ padding: "6px 10px", borderRadius: 6, border: `1px solid ${C.border}`, background: C.bg, color: C.text, fontSize: 12, width: 260, outline: "none" }}
-                    onKeyDown={e => { if (e.key === "Enter") { setAtToken(e.target.value); } }}
-                    onChange={e => e.target.dataset.val = e.target.value} />
-                  <button onClick={e => { const input = e.target.previousSibling; setAtToken(input.dataset.val || input.value); }}
-                    style={{ padding: "6px 14px", borderRadius: 6, border: `1px solid ${C.accent}`, background: C.accent + "22", color: C.accent, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>Load</button>
-                </div>
-                {atError && <div style={{ color: C.danger, fontSize: 11, marginTop: 8 }}>{atError}</div>}
-              </div>
-            )}
-
-            {atLoading && <div style={{ padding: 20, textAlign: "center", color: C.textMuted, fontSize: 12 }}>Loading tasks from Airtable...</div>}
-
-            {/* Kanban by area → method */}
-            {atTasks.length > 0 && !atLoading && (() => {
-              const methodMap = {};
-              atMethods.forEach(m => { methodMap[m.id] = m.fields["Method Name"] || m.fields.Name || m.id; });
-              const areaMap = {};
-              atAreas.forEach(a => { areaMap[a.id] = a.fields.Name || a.id; });
-
-              // Group tasks by area
-              const byArea = {};
-              atTasks.forEach(t => {
-                const areaLinks = t.fields["Area (Link)"] || t.fields["Area"] || [];
-                const areaName = Array.isArray(areaLinks) && areaLinks.length > 0 ? (areaMap[areaLinks[0]] || "Unassigned") : (t.fields.Area || "Unassigned");
-                if (!byArea[areaName]) byArea[areaName] = [];
-                byArea[areaName].push(t);
-              });
-
-              const statusColors = { Planned: C.warn, "In Progress": C.accent, Complete: C.spring, Recurring: C.water, "Seasonal Hold": C.textMuted, Blocked: C.danger, Backlog: C.textDim };
-              const statusOrder = ["In Progress", "Planned", "Recurring", "Blocked", "Seasonal Hold", "Complete", "Backlog"];
-
-              return Object.entries(byArea).sort(([a], [b]) => a.localeCompare(b)).map(([areaName, tasks]) => {
-                // Group by method within area
-                const byMethod = {};
-                tasks.forEach(t => {
-                  const methodLinks = t.fields.Method || [];
-                  const methodName = Array.isArray(methodLinks) && methodLinks.length > 0 ? (methodMap[methodLinks[0]] || "General") : "General";
-                  if (!byMethod[methodName]) byMethod[methodName] = [];
-                  byMethod[methodName].push(t);
-                });
-
-                return (
-                  <details key={areaName} style={{ marginBottom: 8 }} open>
-                    <summary style={{ cursor: "pointer", padding: "8px 10px", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 12, fontWeight: 700, color: C.accent, listStyle: "none", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                      <span>📍 {areaName}</span>
-                      <span style={{ fontSize: 10, color: C.textMuted, fontWeight: 400 }}>{tasks.length} tasks</span>
-                    </summary>
-                    <div style={{ paddingLeft: 12, marginTop: 4 }}>
-                      {Object.entries(byMethod).sort(([a], [b]) => a.localeCompare(b)).map(([methodName, mTasks]) => (
-                        <div key={methodName} style={{ marginBottom: 6 }}>
-                          <div style={{ fontSize: 10, fontWeight: 600, color: C.textMuted, padding: "4px 0", borderBottom: `1px solid ${C.border}22` }}>⚙ {methodName} ({mTasks.length})</div>
-                          {mTasks
-                            .sort((a, b) => statusOrder.indexOf(a.fields.Status || "") - statusOrder.indexOf(b.fields.Status || ""))
-                            .map(t => (
-                            <div key={t.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "4px 8px", borderBottom: `1px solid ${C.border}11`, fontSize: 11 }}>
-                              <span style={{ color: C.text, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.fields.Name || "Untitled"}</span>
-                              <div style={{ display: "flex", gap: 4, alignItems: "center", flexShrink: 0, marginLeft: 8 }}>
-                                {t.fields["Task Type"] && <span style={{ fontSize: 9, color: C.textDim }}>{t.fields["Task Type"]}</span>}
-                                <span style={{ padding: "1px 6px", borderRadius: 4, fontSize: 9, fontWeight: 600,
-                                  color: statusColors[t.fields.Status] || C.textMuted,
-                                  background: (statusColors[t.fields.Status] || C.textMuted) + "18" }}>
-                                  {t.fields.Status || "—"}
-                                </span>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      ))}
-                    </div>
-                  </details>
-                );
-              });
-            })()}
-          </div>
-        )}
 
       </div>
     </div>
