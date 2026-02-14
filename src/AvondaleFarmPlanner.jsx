@@ -432,7 +432,7 @@ export default function AvondaleFarmPlanner() {
   const [tooltip, setTooltip] = useState(null);
   const [view, setView] = useState("map");
   const [selectedInfraZone, setSelectedInfraZone] = useState(null);
-  const [bottomTab, setBottomTab] = useState("timeline");
+  const [bottomTab, setBottomTab] = useState("areas");
   const [isMobile, setIsMobile] = useState(false);
   useEffect(() => {
     const check = () => setIsMobile(window.innerWidth < 768);
@@ -446,6 +446,7 @@ export default function AvondaleFarmPlanner() {
   const [atMethods, setAtMethods] = useState([]);
   const [atAreas, setAtAreas] = useState([]);
   const [atPlots, setAtPlots] = useState([]);
+  const [atPlantsDB, setAtPlants] = useState([]);
   const AT_TOKEN = "patUuQy8MfVOozGRe.59276185b53c5d0d191809b719b546db0032e455a25d5b58e2a88ddd8a034310";
   const [atLoading, setAtLoading] = useState(false);
   const [atError, setAtError] = useState(null);
@@ -468,18 +469,50 @@ export default function AvondaleFarmPlanner() {
         } while (offset);
         return all;
       };
-      const [tasks, methods, areas, plots] = await Promise.all([
+      const [tasks, methods, areas, plots, plants] = await Promise.all([
         fetchAll("tblwxecwIEV6Ehu6F", "Avondale"),
         fetchAll("tblqZKea6J4Thvgtz"),
         fetchAll("tbl7ztPLlm7wevuh9"),
         fetchAll("tblrpebzWu7z2uwaX"),
+        fetchAll("tblKRilYEwCOGAfPx"),
       ]);
-      setAtTasks(tasks); setAtMethods(methods); setAtAreas(areas); setAtPlots(plots);
+      setAtTasks(tasks); setAtMethods(methods); setAtAreas(areas); setAtPlots(plots); setAtPlants(plants);
     } catch (err) { setAtError(err.message); }
     setAtLoading(false);
   }, []);
 
   useEffect(() => { fetchAirtable(); }, [fetchAirtable]);
+
+  // ─── Update task status in Airtable ───
+  const updateTaskStatus = useCallback(async (taskId, newStatus) => {
+    const headers = { Authorization: `Bearer ${AT_TOKEN}`, "Content-Type": "application/json" };
+    try {
+      await fetch(`https://api.airtable.com/v0/appQbfU2XIx0UEYIh/tblwxecwIEV6Ehu6F/${taskId}`, {
+        method: "PATCH", headers, body: JSON.stringify({ fields: { Status: newStatus } }),
+      });
+      setAtTasks(prev => prev.map(t => t.id === taskId ? { ...t, fields: { ...t.fields, Status: newStatus } } : t));
+    } catch (err) { console.error("Failed to update status:", err); }
+  }, []);
+
+  // ─── Resolve plant names for a task ───
+  const resolveTaskPlants = useCallback((task) => {
+    const plantLinks = task.fields["Plant(s)"];
+    if (!Array.isArray(plantLinks) || plantLinks.length === 0) return [];
+    return plantLinks.map(id => {
+      const rec = atPlantsDB.find(p => p.id === id);
+      return rec ? { id, name: rec.fields.Name || rec.fields["Plant Name"] || id, type: rec.fields.Type || rec.fields["Plant Type"] || "" } : { id, name: id, type: "" };
+    });
+  }, [atPlantsDB]);
+
+  // ─── Resolve dependency task details ───
+  const resolveTaskDeps = useCallback((task) => {
+    const depLinks = task.fields["Depends On"];
+    if (!Array.isArray(depLinks) || depLinks.length === 0) return [];
+    return depLinks.map(id => {
+      const dep = atTasks.find(t => t.id === id);
+      return dep ? { id: dep.id, name: dep.fields.Name || "Untitled", status: dep.fields.Status || "—", incomplete: dep.fields.Status !== "Complete" } : { id, name: id, status: "?", incomplete: true };
+    });
+  }, [atTasks]);
 
   // ─── Resolve Airtable area name for a task via Plot → Area chain ───
   const resolveTaskArea = useCallback((task) => {
@@ -929,6 +962,7 @@ export default function AvondaleFarmPlanner() {
               { id: "areas", label: "Areas", icon: "📍", val: `${AREAS.length}`, color: C.accent },
               { id: "plots", label: "Plots", icon: "🌱", val: `${PLOTS.length}`, color: C.spring },
               { id: "plants", label: "Plants", icon: "🌿", val: `${PLANTS.length}`, color: C.summer },
+              { id: "tasks", label: "Tasks", icon: "✅", val: atTasks.length > 0 ? `${atTasks.length}` : "—", color: C.warn },
             ].map(tab => (
               <div key={tab.id} onClick={() => setBottomTab(tab.id)}
                 style={{
@@ -1092,83 +1126,6 @@ export default function AvondaleFarmPlanner() {
               ))}
             </div>
 
-            {/* ─── Task Drawers (by Area → Method) ─── */}
-            <div style={{ marginTop: 16, borderTop: `1px solid ${C.border}`, paddingTop: 12 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-                <div style={{ fontSize: 12, fontWeight: 700, color: C.accent, letterSpacing: 0.5, textTransform: "uppercase" }}>Avondale Tasks ({atTasks.length})</div>
-                {atTasks.length > 0 && (
-                  <button onClick={fetchAirtable}
-                    style={{ padding: "3px 10px", borderRadius: 4, border: `1px solid ${C.border}`, background: "transparent", color: C.textMuted, fontSize: 10, cursor: "pointer" }}>↻ Refresh</button>
-                )}
-              </div>
-
-              {atLoading && <div style={{ padding: 12, textAlign: "center", color: C.textMuted, fontSize: 12 }}>Loading tasks...</div>}
-              {atError && <div style={{ padding: 8, color: C.danger, fontSize: 11 }}>{atError}</div>}
-
-              {atTasks.length > 0 && !atLoading && (() => {
-                const methodMap = {};
-                atMethods.forEach(m => { methodMap[m.id] = m.fields["Method Name"] || m.fields.Name || m.id; });
-
-                const statusColors = { Planned: C.warn, "In Progress": C.accent, Complete: C.spring, Recurring: C.water, "Seasonal Hold": C.textMuted, Blocked: C.danger, Backlog: C.textDim };
-                const statusOrder = ["In Progress", "Planned", "Recurring", "Blocked", "Seasonal Hold", "Complete", "Backlog"];
-
-                // Group tasks by resolved area
-                const byArea = {};
-                atTasks.forEach(t => {
-                  const areaName = resolveTaskArea(t);
-                  if (!byArea[areaName]) byArea[areaName] = [];
-                  byArea[areaName].push(t);
-                });
-
-                return Object.entries(byArea).sort(([a], [b]) => a.localeCompare(b)).map(([areaName, tasks]) => {
-                  const byMethod = {};
-                  tasks.forEach(t => {
-                    const ml = t.fields.Method || [];
-                    const mn = Array.isArray(ml) && ml.length > 0 ? (methodMap[ml[0]] || "General") : "General";
-                    if (!byMethod[mn]) byMethod[mn] = [];
-                    byMethod[mn].push(t);
-                  });
-
-                  const planned = tasks.filter(t => t.fields.Status === "Planned").length;
-                  const done = tasks.filter(t => t.fields.Status === "Complete").length;
-
-                  return (
-                    <details key={areaName} style={{ marginBottom: 6 }}>
-                      <summary style={{ cursor: "pointer", padding: "8px 12px", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 12, fontWeight: 600, color: C.text, listStyle: "none", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                        <span>📍 {areaName}</span>
-                        <div style={{ display: "flex", gap: 6, fontSize: 10 }}>
-                          <span style={{ color: C.warn }}>{planned} planned</span>
-                          <span style={{ color: C.spring }}>{done} done</span>
-                          <span style={{ color: C.textDim }}>{tasks.length} total</span>
-                        </div>
-                      </summary>
-                      <div style={{ paddingLeft: 12, marginTop: 4 }}>
-                        {Object.entries(byMethod).sort(([a], [b]) => a.localeCompare(b)).map(([methodName, mTasks]) => (
-                          <div key={methodName} style={{ marginBottom: 6 }}>
-                            <div style={{ fontSize: 10, fontWeight: 600, color: C.textMuted, padding: "4px 0", borderBottom: `1px solid ${C.border}22` }}>⚙ {methodName} ({mTasks.length})</div>
-                            {mTasks
-                              .sort((a, b) => statusOrder.indexOf(a.fields.Status || "") - statusOrder.indexOf(b.fields.Status || ""))
-                              .map(t => (
-                              <div key={t.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "4px 8px", borderBottom: `1px solid ${C.border}11`, fontSize: 11 }}>
-                                <span style={{ color: C.text, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.fields.Name || "Untitled"}</span>
-                                <div style={{ display: "flex", gap: 4, alignItems: "center", flexShrink: 0, marginLeft: 8 }}>
-                                  {t.fields["Task Type"] && <span style={{ fontSize: 9, color: C.textDim }}>{t.fields["Task Type"]}</span>}
-                                  <span style={{ padding: "1px 6px", borderRadius: 4, fontSize: 9, fontWeight: 600,
-                                    color: statusColors[t.fields.Status] || C.textMuted,
-                                    background: (statusColors[t.fields.Status] || C.textMuted) + "18" }}>
-                                    {t.fields.Status || "—"}
-                                  </span>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        ))}
-                      </div>
-                    </details>
-                  );
-                });
-              })()}
-            </div>
           </div>
         )}
 
@@ -1320,6 +1277,164 @@ export default function AvondaleFarmPlanner() {
           </div>
         )}
 
+        {/* TASKS TAB — Rich kanban by area → method with columns */}
+        {bottomTab === "tasks" && (
+          <div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: C.accent, letterSpacing: 0.5, textTransform: "uppercase" }}>Avondale Tasks ({atTasks.length})</div>
+              {atTasks.length > 0 && (
+                <button onClick={fetchAirtable}
+                  style={{ padding: "3px 10px", borderRadius: 4, border: `1px solid ${C.border}`, background: "transparent", color: C.textMuted, fontSize: 10, cursor: "pointer" }}>↻ Refresh</button>
+              )}
+            </div>
+
+            {atLoading && <div style={{ padding: 20, textAlign: "center", color: C.textMuted, fontSize: 12 }}>Loading tasks from Airtable...</div>}
+            {atError && <div style={{ padding: 8, color: C.danger, fontSize: 11 }}>{atError}</div>}
+
+            {atTasks.length > 0 && !atLoading && (() => {
+              const methodMap = {};
+              atMethods.forEach(m => { methodMap[m.id] = m.fields["Method Name"] || m.fields.Name || m.id; });
+
+              const statusColors = { Planned: C.warn, "In Progress": C.accent, Complete: C.spring, Recurring: C.water, "Seasonal Hold": C.textMuted, Blocked: C.danger, Backlog: C.textDim };
+              const statusOrder = ["In Progress", "Planned", "Recurring", "Blocked", "Seasonal Hold", "Complete", "Backlog"];
+              const statusOptions = ["Planned", "In Progress", "Complete", "Recurring", "Seasonal Hold", "Blocked", "Backlog"];
+
+              const fmtDate = (d) => { if (!d) return "—"; const dt = new Date(d); return `${dt.getMonth()+1}/${dt.getDate()}`; };
+
+              // Group tasks by resolved area
+              const byArea = {};
+              atTasks.forEach(t => {
+                const areaName = resolveTaskArea(t);
+                if (!byArea[areaName]) byArea[areaName] = [];
+                byArea[areaName].push(t);
+              });
+
+              return Object.entries(byArea).sort(([a], [b]) => a.localeCompare(b)).map(([areaName, areaTasks]) => {
+                const byMethod = {};
+                areaTasks.forEach(t => {
+                  const ml = t.fields.Method || [];
+                  const mn = Array.isArray(ml) && ml.length > 0 ? (methodMap[ml[0]] || "General") : "General";
+                  if (!byMethod[mn]) byMethod[mn] = [];
+                  byMethod[mn].push(t);
+                });
+
+                const planned = areaTasks.filter(t => t.fields.Status === "Planned").length;
+                const inProg = areaTasks.filter(t => t.fields.Status === "In Progress").length;
+                const done = areaTasks.filter(t => t.fields.Status === "Complete").length;
+
+                return (
+                  <details key={areaName} style={{ marginBottom: 8 }}>
+                    <summary style={{ cursor: "pointer", padding: "10px 14px", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 12, fontWeight: 700, color: C.text, listStyle: "none", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <span style={{ color: C.accent }}>📍 {areaName}</span>
+                      <div style={{ display: "flex", gap: 8, fontSize: 10 }}>
+                        {inProg > 0 && <span style={{ color: C.accent }}>{inProg} active</span>}
+                        <span style={{ color: C.warn }}>{planned} planned</span>
+                        <span style={{ color: C.spring }}>{done} done</span>
+                        <span style={{ color: C.textDim }}>{areaTasks.length} total</span>
+                      </div>
+                    </summary>
+                    <div style={{ paddingLeft: 8, marginTop: 6 }}>
+                      {Object.entries(byMethod).sort(([a], [b]) => a.localeCompare(b)).map(([methodName, mTasks]) => (
+                        <details key={methodName} style={{ marginBottom: 6 }} open>
+                          <summary style={{ cursor: "pointer", padding: "6px 10px", background: C.bgCard, border: `1px solid ${C.border}33`, borderRadius: 6, fontSize: 11, fontWeight: 600, color: C.textMuted, listStyle: "none", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                            <span>⚙ {methodName}</span>
+                            <span style={{ fontSize: 10, color: C.textDim }}>{mTasks.length}</span>
+                          </summary>
+                          <div style={{ marginTop: 4, overflowX: "auto" }}>
+                            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11, minWidth: isMobile ? 700 : 600 }}>
+                              <thead>
+                                <tr style={{ borderBottom: `1px solid ${C.border}44` }}>
+                                  {["Task", "Plants", "Start", "Due", "Hrs", "Depends On", "Status"].map(h => (
+                                    <th key={h} style={{ padding: "4px 6px", textAlign: "left", color: C.textDim, fontWeight: 600, fontSize: 9, textTransform: "uppercase", letterSpacing: 0.5 }}>{h}</th>
+                                  ))}
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {mTasks
+                                  .sort((a, b) => statusOrder.indexOf(a.fields.Status || "") - statusOrder.indexOf(b.fields.Status || ""))
+                                  .map(t => {
+                                    const plants = resolveTaskPlants(t);
+                                    const deps = resolveTaskDeps(t);
+                                    const hasIncompleteDep = deps.some(d => d.incomplete);
+                                    return (
+                                      <tr key={t.id} style={{ borderBottom: `1px solid ${C.border}11`, background: hasIncompleteDep ? C.danger + "08" : "transparent" }}>
+                                        {/* Task Name */}
+                                        <td style={{ padding: "6px 6px", fontWeight: 600, color: C.text, maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                          {t.fields.Name || "Untitled"}
+                                          {t.fields["Task Type"] && <span style={{ fontSize: 9, color: C.textDim, marginLeft: 4 }}>({t.fields["Task Type"]})</span>}
+                                        </td>
+                                        {/* Plants — hover for details */}
+                                        <td style={{ padding: "6px 6px", fontSize: 10, maxWidth: 120 }}>
+                                          {plants.length > 0 ? (
+                                            <div style={{ display: "flex", gap: 3, flexWrap: "wrap" }}>
+                                              {plants.map((p, i) => (
+                                                <span key={i} title={`${p.name}${p.type ? ` (${p.type})` : ""}`}
+                                                  style={{ padding: "1px 5px", borderRadius: 3, background: C.spring + "18", border: `1px solid ${C.spring}33`, fontSize: 9, color: C.spring, cursor: "default" }}>
+                                                  {p.name?.length > 12 ? p.name.slice(0, 12) + "…" : p.name}
+                                                </span>
+                                              ))}
+                                            </div>
+                                          ) : <span style={{ color: C.textDim }}>—</span>}
+                                        </td>
+                                        {/* Start Date */}
+                                        <td style={{ padding: "6px 6px", color: C.textMuted, fontSize: 10, whiteSpace: "nowrap" }}>{fmtDate(t.fields["Start Date"])}</td>
+                                        {/* Due Date */}
+                                        <td style={{ padding: "6px 6px", fontSize: 10, whiteSpace: "nowrap",
+                                          color: t.fields["Due Date"] && new Date(t.fields["Due Date"]) < new Date() && t.fields.Status !== "Complete" ? C.danger : C.textMuted }}>
+                                          {fmtDate(t.fields["Due Date"])}
+                                        </td>
+                                        {/* Estimated Hours */}
+                                        <td style={{ padding: "6px 6px", color: C.textMuted, fontSize: 10, textAlign: "center" }}>{t.fields["Estimated Hours"] != null ? t.fields["Estimated Hours"] : "—"}</td>
+                                        {/* Depends On — hover for dep details, highlight if incomplete */}
+                                        <td style={{ padding: "6px 6px", fontSize: 10, maxWidth: 140 }}>
+                                          {deps.length > 0 ? (
+                                            <div style={{ display: "flex", gap: 3, flexWrap: "wrap" }}>
+                                              {deps.map((d, i) => (
+                                                <span key={i}
+                                                  title={`${d.name} — ${d.status}${d.incomplete ? " ⚠ INCOMPLETE" : ""}`}
+                                                  style={{
+                                                    padding: "1px 5px", borderRadius: 3, fontSize: 9, cursor: "default",
+                                                    background: d.incomplete ? C.danger + "22" : C.spring + "18",
+                                                    border: `1px solid ${d.incomplete ? C.danger + "55" : C.spring + "33"}`,
+                                                    color: d.incomplete ? C.danger : C.spring,
+                                                  }}>
+                                                  {d.name?.length > 14 ? d.name.slice(0, 14) + "…" : d.name}
+                                                  {d.incomplete && " ⚠"}
+                                                </span>
+                                              ))}
+                                            </div>
+                                          ) : <span style={{ color: C.textDim }}>—</span>}
+                                        </td>
+                                        {/* Status — editable dropdown */}
+                                        <td style={{ padding: "6px 6px" }}>
+                                          <select
+                                            value={t.fields.Status || "Planned"}
+                                            onChange={e => updateTaskStatus(t.id, e.target.value)}
+                                            style={{
+                                              padding: "2px 4px", borderRadius: 4, fontSize: 9, fontWeight: 600, cursor: "pointer", border: `1px solid ${(statusColors[t.fields.Status] || C.textMuted) + "44"}`,
+                                              background: (statusColors[t.fields.Status] || C.textMuted) + "18", color: statusColors[t.fields.Status] || C.textMuted,
+                                              outline: "none", WebkitAppearance: "none", MozAppearance: "none", appearance: "none", paddingRight: 14,
+                                              backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5' viewBox='0 0 8 5'%3E%3Cpath fill='%239aaa80' d='M0 0l4 5 4-5z'/%3E%3C/svg%3E")`,
+                                              backgroundRepeat: "no-repeat", backgroundPosition: "right 4px center",
+                                            }}>
+                                            {statusOptions.map(s => <option key={s} value={s}>{s}</option>)}
+                                          </select>
+                                        </td>
+                                      </tr>
+                                    );
+                                  })}
+                              </tbody>
+                            </table>
+                          </div>
+                        </details>
+                      ))}
+                    </div>
+                  </details>
+                );
+              });
+            })()}
+          </div>
+        )}
 
       </div>
     </div>
