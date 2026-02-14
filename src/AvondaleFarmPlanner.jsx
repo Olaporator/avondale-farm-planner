@@ -60,7 +60,7 @@ const AREAS = [
 
 // ─── Plot Data ───
 const PLOTS = [
-  { id: "g2rr1", area: "garden2", name: "Beans + Root Intercrops", type: "Raised Row", sqft: 160, status: "Done", color: C.raised, nutrientCode: "LLHLLM", soil: "Loamy/Light" },
+  { id: "g2rr1", area: "garden2", name: "Snow Peas → Pole Beans Rotation", type: "Raised Row", sqft: 160, status: "Done", color: C.raised, nutrientCode: "LLHLLM", soil: "Loamy/Light" },
   { id: "g2rr3", area: "garden2", name: "Potatoes", type: "Raised Row", sqft: 140, status: "Planned", color: C.raised, nutrientCode: "MLHLLM", soil: "Loamy/Light" },
   { id: "g2rr4", area: "garden2", name: "Carrots + Mustard", type: "Raised Row", sqft: 100, status: "Planned", color: C.raised, nutrientCode: "LLHLLM", soil: "Light/Sandy" },
   { id: "g2rr2", area: "garden2", name: "Garlic + Onions", type: "Raised Row", sqft: 100, status: "Done", color: C.raised, nutrientCode: "MLHMMM", soil: "Loamy/Light" },
@@ -68,7 +68,7 @@ const PLOTS = [
   { id: "g2rr6", area: "garden2", name: "Spinach + Lettuce", type: "Raised Bed", sqft: 80, status: "Planned", color: C.raisedBed, nutrientCode: "MLHLMH", soil: "Rich/Organic" },
   { id: "g2hb2", area: "garden2", name: "Kale + Chard + Broccoli", type: "Hügelkultur", sqft: 90, status: "Planned", color: C.hugel, nutrientCode: "HMHMHH", soil: "Rich/Organic" },
   { id: "g2hb1", area: "garden2", name: "Winter Squash", type: "Hügelkultur", sqft: 100, status: "Planned", color: C.hugel, nutrientCode: "HMHMHH", soil: "Loamy/Rich" },
-  { id: "g2hb3", area: "garden2", name: "Hügel Reserve", type: "Hügelkultur", sqft: 80, status: "Planned", color: C.hugel },
+  { id: "g2hb3", area: "garden2", name: "Eggplant (Hügel)", type: "Hügelkultur", sqft: 80, status: "Planned", color: C.hugel },
   { id: "g2gh1", area: "garden2", name: "Greenhouse 1", type: "Structure", sqft: 200, status: "Planned", color: C.greenhouse },
   { id: "g2gh2", area: "garden2", name: "Greenhouse 2", type: "Structure", sqft: 200, status: "Planned", color: C.greenhouse },
   { id: "g2sd1", area: "garden2", name: "Solar Dehydrator 1", type: "Equipment", sqft: 16, status: "Planned", color: C.dehydrator },
@@ -200,10 +200,17 @@ const PLANTS = [
       { season: "Summer", action: "Water", notes: "1-2\" per week. Critical during flowering (tuber formation)." },
       { season: "Fall", action: "Harvest", notes: "Dig 2-3 weeks after vines die back. Cure in dark 1-2 weeks." },
     ]},
-  { id: "beans", name: "Pole Beans + Root Intercrops", plot: "g2rr1", type: "Annual", count: "~40 plants", spacing: "6\" apart",
+  { id: "snowpeas", name: "Snow Peas (Cold Season)", plot: "g2rr1", type: "Annual", count: "~50 seeds", spacing: "2-3\" apart",
     maintenance: [
-      { season: "Spring", action: "Sow", notes: "Direct sow after all frost danger. Soil temp 60\u00B0F+. Install trellis first." },
-      { season: "Spring", action: "Nutrient", notes: "LLHLLM: Low amendments \u2014 beans fix their own nitrogen." },
+      { season: "Winter", action: "Sow", notes: "Direct sow end of Feb, 1\" deep. Cold-hardy — soil temp 40°F+ is fine. Inoculate with rhizobium." },
+      { season: "Spring", action: "Water", notes: "Keep evenly moist. Germination 7-14 days at cool temps. Watch for slugs." },
+      { season: "Spring", action: "Prune", notes: "Train tendrils onto trellis. Redirect wayward growth weekly." },
+      { season: "Spring", action: "Harvest", notes: "Pick flat tender pods every 2-3 days. Both pods and shoots edible. Produces 3-5 weeks." },
+    ]},
+  { id: "beans", name: "Pole Beans (Warm Season)", plot: "g2rr1", type: "Annual", count: "~40 plants", spacing: "6\" apart",
+    maintenance: [
+      { season: "Spring", action: "Sow", notes: "Direct sow mid-May after snow pea rotation cleared. Soil temp 60°F+. Reuse trellis." },
+      { season: "Spring", action: "Nutrient", notes: "LLHLLM: Low amendments — beans fix their own nitrogen. Snow pea roots left in soil add N." },
       { season: "Summer", action: "Water", notes: "1\" per week. Water at base, not foliage." },
       { season: "Summer", action: "Harvest", notes: "Pick every 2-3 days for snap beans; leave for dry beans." },
       { season: "Fall", action: "Harvest", notes: "Dry beans: leave pods on vine until brown. Shell and store." },
@@ -237,6 +244,16 @@ const PLANTS = [
       { season: "Summer", action: "Water", notes: "Deep water weekly. H\u00FCgel bed retains moisture well." },
       { season: "Summer", action: "Prune", notes: "Train vines up trellis. Use slings for heavy fruit." },
       { season: "Fall", action: "Harvest", notes: "When stem is dry/corky. Cure 2 weeks in sun. Store cool & dry." },
+    ]},
+  { id: "eggplant", name: "Eggplant", plot: "g2hb3", type: "Annual", count: "4-6 transplants", spacing: "18-24\" apart",
+    maintenance: [
+      { season: "Winter", action: "Sow", notes: "Start seeds indoors late Feb. Heat mat 80-85°F. Grow lights 14-16 hrs/day." },
+      { season: "Spring", action: "Nutrient", notes: "Pot up at 2 true leaves. Harden off late April over 10-14 days." },
+      { season: "Spring", action: "Sow", notes: "Transplant to hügel reserve bed mid-May after last frost. Mulch heavily." },
+      { season: "Summer", action: "Water", notes: "1-2\" per week. Consistent moisture critical during flowering. Hügel bed helps." },
+      { season: "Summer", action: "Prune", notes: "Stake when 12\" tall. Remove suckers below first fork for larger fruit." },
+      { season: "Summer", action: "Harvest", notes: "Pick when glossy & firm, before seeds darken. Cut with pruners. 4-6 fruit/plant." },
+      { season: "Fall", action: "Harvest", notes: "Continues until first frost. Cover with row cover to extend a few weeks." },
     ]},
   { id: "kale", name: "Kale", plot: "g2hb2", type: "Annual/Biennial", count: "6 transplants", spacing: "18\" apart",
     maintenance: [
@@ -838,7 +855,7 @@ export default function AvondaleFarmPlanner() {
             <text x={ML.gardenBounds.x + 5} y={ML.gardenBounds.y + ML.gardenBounds.h - 5} fill={C.accent + "88"} fontSize={10} fontWeight={700}>Home Garden</text>
 
             {/* Crop plots */}
-            {renderPlot("g2rr1", "Beans + Root Intercrops")}
+            {renderPlot("g2rr1", "Snow Peas → Pole Beans Rotation")}
             {renderPlot("g2rr3", "Potatoes")}
             {renderPlot("g2rr4", "Carrots + Mustard")}
             {renderPlot("g2rr2", "Garlic + Onions")}
@@ -846,7 +863,7 @@ export default function AvondaleFarmPlanner() {
             {renderPlot("g2rr6", "Spinach+Lettuce")}
             {renderPlot("g2hb1", "Winter Squash")}
             {renderPlot("g2rr5", "Beets+Mustard")}
-            {renderPlot("g2hb3", "Hügel Reserve")}
+            {renderPlot("g2hb3", "Eggplant (Hügel)")}
 
             {/* Infrastructure Zone (left of crop grid, below potatoes) */}
             <rect x={ML.infraBounds.x} y={ML.infraBounds.y} width={ML.infraBounds.w} height={ML.infraBounds.h}
@@ -1112,7 +1129,9 @@ export default function AvondaleFarmPlanner() {
                 { label: "Kale", start: 2, end: 6, color: C.hugel },
                 { label: "Chard", start: 2, end: 6, color: C.hugel },
                 { label: "Broccoli", start: 2, end: 5, color: C.hugel },
+                { label: "Snow Peas", start: 0, end: 3, color: C.spring },
                 { label: "Pole Beans", start: 3, end: 7, color: C.raised },
+                { label: "Eggplant", start: 0, end: 8, color: C.hugel },
                 { label: "Winter Squash", start: 3, end: 8, color: C.hugel },
                 { label: "Native Garden", start: 0, end: 10, color: "#4a6a3a" },
                 { label: "Infrastructure", start: 0, end: 11, color: C.warn },
