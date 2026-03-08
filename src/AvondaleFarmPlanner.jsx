@@ -60,7 +60,8 @@ const AREAS = [
 
 // ─── Plot Data ───
 const PLOTS = [
-  { id: "g2rr1", area: "garden2", name: "Snow Peas → Pole Beans Rotation", type: "Raised Row", sqft: 160, status: "Done", color: C.raised, nutrientCode: "LLHLLM", soil: "Loamy/Light" },
+  { id: "g2rr1a", area: "garden2", name: "Broad Windsor Fava → Pole Beans", type: "Raised Row", sqft: 72, status: "Active", color: C.raised, nutrientCode: "LLHLLM", soil: "Loamy/Light" },
+  { id: "g2rr1b", area: "garden2", name: "Aquadulce Fava → Pole Beans", type: "Raised Row", sqft: 72, status: "Active", color: C.raised, nutrientCode: "LLHLLM", soil: "Loamy/Light" },
   { id: "g2rr3", area: "garden2", name: "Potatoes", type: "Raised Row", sqft: 140, status: "Planned", color: C.raised, nutrientCode: "MLHLLM", soil: "Loamy/Light" },
   { id: "g2rr4", area: "garden2", name: "Carrots + Mustard", type: "Raised Row", sqft: 100, status: "Planned", color: C.raised, nutrientCode: "LLHLLM", soil: "Light/Sandy" },
   { id: "g2rr2", area: "garden2", name: "Garlic + Onions", type: "Raised Row", sqft: 100, status: "Done", color: C.raised, nutrientCode: "MLHMMM", soil: "Loamy/Light" },
@@ -84,7 +85,9 @@ const ML = {
   nativeBounds: { x: 560, y: 325, w: 340, h: 165 },
   infraBounds:  { x: 85, y: 215, w: 82, h: 175 },
   // Full-width crop rows
-  beans:    { x: 90, y: 120, w: 280, h: 35 },
+  fava1:    { x: 90, y: 120, w: 134, h: 35 },
+  favaGap:  { x: 224, y: 120, w: 12, h: 35 },
+  fava2:    { x: 236, y: 120, w: 134, h: 35 },
   potatoes: { x: 90, y: 162, w: 280, h: 35 },
   // Left crop column (right of infrastructure)
   carrots:  { x: 172, y: 215, w: 98, h: 30 },
@@ -104,7 +107,7 @@ const ML = {
 
 // Plot ID → map position lookup
 const PLOT_POS = {
-  g2rr1: ML.beans, g2rr3: ML.potatoes,
+  g2rr1a: ML.fava1, g2rr1b: ML.fava2, g2rr3: ML.potatoes,
   g2rr4: ML.carrots, g2rr2: ML.garlic,
   g2hb2: ML.kale, g2rr6: ML.spinach,
   g2hb1: ML.squash, g2rr5: ML.beets,
@@ -200,17 +203,36 @@ const PLANTS = [
       { season: "Summer", action: "Water", notes: "1-2\" per week. Critical during flowering (tuber formation)." },
       { season: "Fall", action: "Harvest", notes: "Dig 2-3 weeks after vines die back. Cure in dark 1-2 weeks." },
     ]},
-  { id: "snowpeas", name: "Snow Peas (Cold Season)", plot: "g2rr1", type: "Annual", count: "~50 seeds", spacing: "2-3\" apart",
+  { id: "fava_windsor", name: "Broad Windsor Fava", plot: "g2rr1a", type: "Annual", count: "~25 seeds", spacing: "6\" apart", depth: "2\" deep",
     maintenance: [
-      { season: "Winter", action: "Sow", notes: "Direct sow end of Feb, 1\" deep. Cold-hardy — soil temp 40°F+ is fine. Inoculate with rhizobium." },
-      { season: "Spring", action: "Water", notes: "Keep evenly moist. Germination 7-14 days at cool temps. Watch for slugs." },
-      { season: "Spring", action: "Prune", notes: "Train tendrils onto trellis. Redirect wayward growth weekly." },
-      { season: "Spring", action: "Harvest", notes: "Pick flat tender pods every 2-3 days. Both pods and shoots edible. Produces 3-5 weeks." },
+      { season: "Winter", action: "Sow", notes: "Direct sow early March, 2\" deep. Cold-hardy — soil temp 40°F+. Inoculate with rhizobium." },
+      { season: "Spring", action: "Water", notes: "Keep evenly moist. Germination 7-14 days. Watch for aphids on tips." },
+      { season: "Spring", action: "Prune", notes: "Pinch growing tips when first pods set to discourage blackfly and redirect energy to pods." },
+      { season: "Spring", action: "Harvest", notes: "Pick young pods for whole eating, or let mature for shelling beans. Produces 4-6 weeks." },
     ]},
-  { id: "beans", name: "Pole Beans (Warm Season)", plot: "g2rr1", type: "Annual", count: "~40 plants", spacing: "6\" apart",
+  { id: "fava_aquadulce", name: "Aquadulce Fava", plot: "g2rr1b", type: "Annual", count: "~25 seeds", spacing: "6\" apart", depth: "2\" deep",
     maintenance: [
-      { season: "Spring", action: "Sow", notes: "Direct sow mid-May after snow pea rotation cleared. Soil temp 60°F+. Reuse trellis." },
-      { season: "Spring", action: "Nutrient", notes: "LLHLLM: Low amendments — beans fix their own nitrogen. Snow pea roots left in soil add N." },
+      { season: "Winter", action: "Sow", notes: "Direct sow early March, 2\" deep. Aquadulce is extra cold-hardy. Inoculate with rhizobium." },
+      { season: "Spring", action: "Water", notes: "Keep evenly moist. Robust germination. Tolerates wet Pacific NW springs well." },
+      { season: "Spring", action: "Prune", notes: "Pinch tips at first pod set. Aquadulce produces long pods — support if needed." },
+      { season: "Spring", action: "Harvest", notes: "Long pods ready when beans visible through pod. Shell for fresh or dry." },
+    ]},
+  { id: "alyssum_rr1", name: "Alyssum (companion)", plot: "g2rr1a", type: "Companion", count: "Border edging",
+    maintenance: [
+      { season: "Spring", action: "Sow", notes: "Broadcast along bed edges. Attracts hoverflies & parasitic wasps — key fava aphid control." },
+    ]},
+  { id: "marigold_rr1", name: "Marigolds (companion)", plot: "g2rr1b", type: "Companion", count: "Interplanted",
+    maintenance: [
+      { season: "Spring", action: "Sow", notes: "Transplant between fava rows. Deters aphids, nematodes. French marigolds preferred." },
+    ]},
+  { id: "nasturtium_rr1", name: "Nasturtiums (companion)", plot: "g2rr1b", type: "Companion", count: "Interplanted",
+    maintenance: [
+      { season: "Spring", action: "Sow", notes: "Direct sow at bed ends as trap crop for aphids. Edible flowers & leaves." },
+    ]},
+  { id: "beans", name: "Pole Beans (Warm Season)", plot: "g2rr1a", type: "Annual", count: "~40 plants", spacing: "6\" apart",
+    maintenance: [
+      { season: "Spring", action: "Sow", notes: "Direct sow mid-May after fava rotation cleared. Soil temp 60°F+. Reuse trellis." },
+      { season: "Spring", action: "Nutrient", notes: "LLHLLM: Low amendments — beans fix their own nitrogen. Fava roots left in soil add N." },
       { season: "Summer", action: "Water", notes: "1\" per week. Water at base, not foliage." },
       { season: "Summer", action: "Harvest", notes: "Pick every 2-3 days for snap beans; leave for dry beans." },
       { season: "Fall", action: "Harvest", notes: "Dry beans: leave pods on vine until brown. Shell and store." },
@@ -855,7 +877,8 @@ export default function AvondaleFarmPlanner() {
             <text x={ML.gardenBounds.x + 5} y={ML.gardenBounds.y + ML.gardenBounds.h - 5} fill={C.accent + "88"} fontSize={10} fontWeight={700}>Home Garden</text>
 
             {/* Crop plots */}
-            {renderPlot("g2rr1", "Snow Peas → Pole Beans Rotation")}
+            {renderPlot("g2rr1a", "Broad Windsor Fava")}
+            {renderPlot("g2rr1b", "Aquadulce Fava")}
             {renderPlot("g2rr3", "Potatoes")}
             {renderPlot("g2rr4", "Carrots + Mustard")}
             {renderPlot("g2rr2", "Garlic + Onions")}
@@ -1129,7 +1152,8 @@ export default function AvondaleFarmPlanner() {
                 { label: "Kale", start: 2, end: 6, color: C.hugel },
                 { label: "Chard", start: 2, end: 6, color: C.hugel },
                 { label: "Broccoli", start: 2, end: 5, color: C.hugel },
-                { label: "Snow Peas", start: 0, end: 3, color: C.spring },
+                { label: "Broad Windsor Fava", start: 0, end: 4, color: C.spring },
+                { label: "Aquadulce Fava", start: 0, end: 4, color: C.spring },
                 { label: "Pole Beans", start: 3, end: 7, color: C.raised },
                 { label: "Eggplant", start: 0, end: 8, color: C.hugel },
                 { label: "Winter Squash", start: 3, end: 8, color: C.hugel },
